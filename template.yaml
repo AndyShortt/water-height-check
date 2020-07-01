@@ -1,0 +1,69 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  Checks Creek Water Height, Logs it, and Notifies At Thresholds
+
+Resources:
+  WaterCheckFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: functions/water_check/
+      Handler: lambda_function.lambda_handler
+      Runtime: python3.8
+      MemorySize: 128
+      Timeout: 10
+      Environment:
+        Variables:
+          SNS_ARN: !Ref CreekNotificationSNS
+      Role: !GetAtt WaterHeightLambdaRole.Arn
+      Events:
+        CheckSite:
+          Type: Schedule
+          Properties:
+            Schedule: 'rate(10 minutes)'
+  
+  CreekNotificationSNS:
+    Type: AWS::SNS::Topic
+  
+  WaterHeightLambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - 'sts:AssumeRole'
+      Path: /
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: SNS_AND_DYNAMO
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 'sns:Publish'
+                  - 'dynamodb:GetItem'
+                  - 'dynamodb:UpdateItem'
+                Resource: '*'
+
+  WaterLevelTable:
+    Type: AWS::Serverless::SimpleTable
+    Properties:
+      TableName: WaterLevelTable
+      PrimaryKey:
+        Name: TYPE
+        Type: String
+      ProvisionedThroughput:
+        ReadCapacityUnits: 1
+        WriteCapacityUnits: 1
+
+Outputs:
+  WaterCheckFunctionArn:
+    Description: "WaterCheckFunction ARN"
+    Value: !Ref WaterCheckFunction
